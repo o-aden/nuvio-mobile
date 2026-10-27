@@ -16,6 +16,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.nuvio.app.core.managed.ManagedRuntimeRepository
+import com.nuvio.app.features.streams.ManagedPlaybackPolicy
+import com.nuvio.app.features.profiles.ProfileRepository
 import com.nuvio.app.core.ui.NuvioLoadingIndicator
 import com.nuvio.app.core.ui.NuvioToastController
 import com.nuvio.app.core.ui.nuvio
@@ -85,6 +88,21 @@ internal fun StreamDestination(
             onBack()
         }
         return
+    }
+    suspend fun openManagedExternalPlayback(playerLaunch: PlayerLaunch): Boolean {
+        if (ManagedRuntimeRepository.enabled) {
+            try {
+                val runtime = ManagedRuntimeRepository.requireRuntime()
+                check(ManagedPlaybackPolicy.acceptsLaunch(playerLaunch.providerAddonId, runtime.identity,
+                    playerLaunch.profileId, ProfileRepository.activeProfileId))
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                NuvioToastController.show("Managed access changed or is unavailable. Select the stream again.")
+                return false
+            }
+        }
+        return openExternalPlayback(playerLaunch)
     }
     val pauseDescription = launch.pauseDescription
     val streamRouteScope = rememberCoroutineScope()
@@ -184,7 +202,7 @@ internal fun StreamDestination(
     ) {
         val infoHash = stream.p2pInfoHash ?: return
         val sentinelUrl = p2pSentinelUrl(infoHash, stream.p2pFileIdx)
-        if (playerSettings.streamReuseLastLinkEnabled) {
+        if (!ManagedRuntimeRepository.enabled && playerSettings.streamReuseLastLinkEnabled) {
             val cacheKey = StreamLinkCacheRepository.contentKey(
                 type = launch.type,
                 videoId = effectiveVideoId,
@@ -296,7 +314,7 @@ internal fun StreamDestination(
         if (reuseHandled) return@LaunchedEffect
         reuseHandled = true
         if (launch.manualSelection) return@LaunchedEffect
-        if (!playerSettings.streamReuseLastLinkEnabled) return@LaunchedEffect
+        if (ManagedRuntimeRepository.enabled || !playerSettings.streamReuseLastLinkEnabled) return@LaunchedEffect
         val cacheKey = StreamLinkCacheRepository.contentKey(
             type = launch.type,
             videoId = effectiveVideoId,
@@ -376,7 +394,7 @@ internal fun StreamDestination(
                 ),
             )
             if (playerSettings.externalPlayerEnabled) {
-                openExternalPlayback(playerLaunch)
+                openManagedExternalPlayback(playerLaunch)
                 StreamsRepository.cancelLoading()
                 StreamsRepository.setOverlayVisible(false)
                 reuseNavigated = true
@@ -486,7 +504,7 @@ internal fun StreamDestination(
         }
         autoPlayHandled = true
         val serverResumeMs = serverResumePositionMs(stream)
-        if (playerSettings.streamReuseLastLinkEnabled && stream.serverTarget == null) {
+        if (!ManagedRuntimeRepository.enabled && playerSettings.streamReuseLastLinkEnabled && stream.serverTarget == null) {
             val cacheKey = StreamLinkCacheRepository.contentKey(
                 type = launch.type,
                 videoId = effectiveVideoId,
@@ -541,7 +559,7 @@ internal fun StreamDestination(
             stream = stream,
         )
         if (playerSettings.externalPlayerEnabled && stream.serverTarget == null) {
-            openExternalPlayback(playerLaunch)
+            openManagedExternalPlayback(playerLaunch)
             StreamsRepository.consumeAutoPlay()
             StreamsRepository.cancelLoading()
             return@LaunchedEffect
@@ -583,6 +601,10 @@ internal fun StreamDestination(
         forceInternal: Boolean,
         saveForReuse: Boolean = true,
     ) {
+        if (ManagedRuntimeRepository.enabled && !stream.addonId.startsWith(ManagedPlaybackPolicy.PREFIX)) {
+            NuvioToastController.show("Select a source provided by Manager.")
+            return
+        }
         if (stream.needsServerPreparation) {
             if (preparingServerStream) return
             streamRouteScope.launch {
@@ -682,7 +704,7 @@ internal fun StreamDestination(
             return
         }
         val sourceUrl = stream.playableDirectUrl ?: return
-        if (saveForReuse && playerSettings.streamReuseLastLinkEnabled && stream.serverTarget == null) {
+        if (!ManagedRuntimeRepository.enabled && saveForReuse && playerSettings.streamReuseLastLinkEnabled && stream.serverTarget == null) {
             val cacheKey = StreamLinkCacheRepository.contentKey(
                 type = launch.type,
                 videoId = effectiveVideoId,
@@ -739,7 +761,7 @@ internal fun StreamDestination(
 
         if (!forceInternal && (forceExternal || playerSettings.externalPlayerEnabled)) {
             streamRouteScope.launch {
-                openExternalPlayback(playerLaunch)
+                openManagedExternalPlayback(playerLaunch)
                 StreamsRepository.cancelLoading()
             }
             return

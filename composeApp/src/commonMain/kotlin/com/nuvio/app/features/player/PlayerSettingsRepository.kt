@@ -46,9 +46,9 @@ data class PlayerSettingsUiState(
     val externalPlayerForwardSubtitles: Boolean = false,
     val externalPlayerSendSkipSegments: Boolean = false,
     val externalPlayerId: String? = ExternalPlayerPlatform.defaultPlayerId(),
-    val preferredAudioLanguage: String = AudioLanguageOption.DEVICE,
-    val secondaryPreferredAudioLanguage: String? = null,
-    val preferredSubtitleLanguage: String = SubtitleLanguageOption.NONE,
+    val preferredAudioLanguage: String = "en",
+    val secondaryPreferredAudioLanguage: String? = AudioLanguageOption.ORIGINAL,
+    val preferredSubtitleLanguage: String = "en",
     val secondaryPreferredSubtitleLanguage: String? = null,
     val subtitleStyle: SubtitleStyleState = SubtitleStyleState.DEFAULT,
     val streamReuseLastLinkEnabled: Boolean = false,
@@ -72,7 +72,7 @@ data class PlayerSettingsUiState(
     val vodCacheEnabled: Boolean = false,
     val vodCacheSizeMode: VodCacheSizeMode = VodCacheSizeMode.AUTO,
     val vodCacheSizeMb: Int = VodCacheSizing.DEFAULT_SIZE_MB,
-    val streamAutoPlayMode: StreamAutoPlayMode = StreamAutoPlayMode.MANUAL,
+    val streamAutoPlayMode: StreamAutoPlayMode = StreamAutoPlayMode.FIRST_STREAM,
     val streamAutoPlaySource: StreamAutoPlaySource = StreamAutoPlaySource.ALL_SOURCES,
     val streamAutoPlaySelectedAddons: Set<String> = emptySet(),
     val streamAutoPlaySelectedPlugins: Set<String> = emptySet(),
@@ -130,9 +130,9 @@ object PlayerSettingsRepository {
     private var externalPlayerForwardSubtitles = false
     private var externalPlayerSendSkipSegments = false
     private var externalPlayerId: String? = ExternalPlayerPlatform.defaultPlayerId()
-    private var preferredAudioLanguage = AudioLanguageOption.DEVICE
-    private var secondaryPreferredAudioLanguage: String? = null
-    private var preferredSubtitleLanguage = SubtitleLanguageOption.NONE
+    private var preferredAudioLanguage = "en"
+    private var secondaryPreferredAudioLanguage: String? = AudioLanguageOption.ORIGINAL
+    private var preferredSubtitleLanguage = "en"
     private var secondaryPreferredSubtitleLanguage: String? = null
     private var subtitleStyle = SubtitleStyleState.DEFAULT
     private var streamReuseLastLinkEnabled = false
@@ -156,7 +156,7 @@ object PlayerSettingsRepository {
     private var vodCacheEnabled = false
     private var vodCacheSizeMode = VodCacheSizeMode.AUTO
     private var vodCacheSizeMb = VodCacheSizing.DEFAULT_SIZE_MB
-    private var streamAutoPlayMode = StreamAutoPlayMode.MANUAL
+    private var streamAutoPlayMode = StreamAutoPlayMode.FIRST_STREAM
     private var streamAutoPlaySource = StreamAutoPlaySource.ALL_SOURCES
     private var streamAutoPlaySelectedAddons: Set<String> = emptySet()
     private var streamAutoPlaySelectedPlugins: Set<String> = emptySet()
@@ -219,9 +219,9 @@ object PlayerSettingsRepository {
         externalPlayerForwardSubtitles = false
         externalPlayerSendSkipSegments = false
         externalPlayerId = ExternalPlayerPlatform.defaultPlayerId()
-        preferredAudioLanguage = AudioLanguageOption.DEVICE
-        secondaryPreferredAudioLanguage = null
-        preferredSubtitleLanguage = SubtitleLanguageOption.NONE
+        preferredAudioLanguage = "en"
+        secondaryPreferredAudioLanguage = AudioLanguageOption.ORIGINAL
+        preferredSubtitleLanguage = "en"
         secondaryPreferredSubtitleLanguage = null
         subtitleStyle = SubtitleStyleState.DEFAULT
         streamReuseLastLinkEnabled = false
@@ -246,7 +246,7 @@ object PlayerSettingsRepository {
         vodCacheSizeMode = VodCacheSizeMode.AUTO
         vodCacheSizeMb = VodCacheSizing.DEFAULT_SIZE_MB
         applyExoPlayerNativeMemory(false)
-        streamAutoPlayMode = StreamAutoPlayMode.MANUAL
+        streamAutoPlayMode = StreamAutoPlayMode.FIRST_STREAM
         streamAutoPlaySource = StreamAutoPlaySource.ALL_SOURCES
         streamAutoPlaySelectedAddons = emptySet()
         streamAutoPlaySelectedPlugins = emptySet()
@@ -307,12 +307,12 @@ object PlayerSettingsRepository {
             ?: ExternalPlayerPlatform.defaultPlayerId()
         preferredAudioLanguage =
             normalizeLanguageCode(PlayerSettingsStorage.loadPreferredAudioLanguage())
-                ?: AudioLanguageOption.DEVICE
+                ?: "en"
         secondaryPreferredAudioLanguage =
-            normalizeLanguageCode(PlayerSettingsStorage.loadSecondaryPreferredAudioLanguage())
+            normalizeLanguageCode(PlayerSettingsStorage.loadSecondaryPreferredAudioLanguage()) ?: AudioLanguageOption.ORIGINAL
         preferredSubtitleLanguage =
             normalizeLanguageCode(PlayerSettingsStorage.loadPreferredSubtitleLanguage())
-                ?: SubtitleLanguageOption.NONE
+                ?: "en"
         secondaryPreferredSubtitleLanguage =
             normalizeLanguageCode(PlayerSettingsStorage.loadSecondaryPreferredSubtitleLanguage())
         subtitleStyle = SubtitleStyleState(
@@ -376,7 +376,7 @@ object PlayerSettingsRepository {
             ?: PlaybackBufferSettings.DEFAULT_TARGET_BUFFER_MB
         streamAutoPlayMode = PlayerSettingsStorage.loadStreamAutoPlayMode()
             ?.let { runCatching { StreamAutoPlayMode.valueOf(it) }.getOrNull() }
-            ?: StreamAutoPlayMode.MANUAL
+            ?: StreamAutoPlayMode.FIRST_STREAM
         streamAutoPlaySource = PlayerSettingsStorage.loadStreamAutoPlaySource()
             ?.let { runCatching { StreamAutoPlaySource.valueOf(it) }.getOrNull() }
             ?: StreamAutoPlaySource.ALL_SOURCES
@@ -569,7 +569,7 @@ object PlayerSettingsRepository {
 
     fun setPreferredAudioLanguage(language: String) {
         ensureLoaded()
-        val normalized = normalizeLanguageCode(language) ?: AudioLanguageOption.DEVICE
+        val normalized = normalizeLanguageCode(language) ?: "en"
         if (preferredAudioLanguage == normalized) return
         preferredAudioLanguage = normalized
         publish()
@@ -587,7 +587,7 @@ object PlayerSettingsRepository {
 
     fun setPreferredSubtitleLanguage(language: String) {
         ensureLoaded()
-        val normalized = normalizeLanguageCode(language) ?: SubtitleLanguageOption.NONE
+        val normalized = normalizeLanguageCode(language) ?: "en"
         if (preferredSubtitleLanguage == normalized) return
         preferredSubtitleLanguage = normalized
         publish()

@@ -1,6 +1,15 @@
 package com.nuvio.app.features.streams
 
 import co.touchlab.kermit.Logger
+import com.nuvio.app.core.auth.AuthRepository
+import com.nuvio.app.core.auth.AuthState
+import com.nuvio.app.core.managed.ManagedDeviceSession
+import com.nuvio.app.core.managed.ManagedDeviceSessionState
+import com.nuvio.app.core.managed.ManagedDeviceStorage
+import com.nuvio.app.core.managed.ManagedRuntimeRepository
+import com.nuvio.app.core.managed.ManagedRuntimeContract
+import com.nuvio.app.features.profiles.ProfileRepository
+import kotlinx.coroutines.CancellationException
 import com.nuvio.app.core.build.AppFeaturePolicy
 import com.nuvio.app.features.addons.AddonRepository
 import com.nuvio.app.features.addons.buildAddonResourceUrl
@@ -75,6 +84,10 @@ object StreamsRepository {
     }
 
     private fun load(type: String, videoId: String, parentMetaId: String?, season: Int?, episode: Int?, manualSelection: Boolean, forceRefresh: Boolean) {
+        if (ManagedRuntimeRepository.enabled) {
+            loadManaged(type, videoId, season, episode, manualSelection, forceRefresh)
+            return
+        }
         val pluginUiState = if (AppFeaturePolicy.pluginsEnabled) {
             PluginRepository.initialize()
             PluginRepository.uiState.value
@@ -647,6 +660,75 @@ object StreamsRepository {
         _uiState.update { it.copy(selectedFilter = addonId) }
     }
 
+    /** This path never queries embedded streams, plugins, direct debrid, or ordinary stream addons. */
+    private fun loadManaged(type: String, videoId: String, season: Int?, episode: Int?, manualSelection: Boolean, forceRefresh: Boolean) {
+        val token = requestToken(type, videoId, season, episode, manualSelection)
+        val profileId = ProfileRepository.activeProfileId
+        val generation = ManagedDeviceStorage.generation()
+        val accountId = (AuthRepository.state.value as? AuthState.Authenticated)?.userId
+        val requestKey = "$token::managed::$profileId::$generation"
+        if (!forceRefresh && activeRequestKey == requestKey && (_uiState.value.isAnyLoading || _uiState.value.hasAnyStreams)) return
+        activeJob?.cancel()
+        activeRequestKey = requestKey
+        _uiState.value = StreamsUiState(requestToken = token, isAnyLoading = true)
+        activeJob = scope.launch {
+            try {
+                val runtime = ManagedRuntimeRepository.requireRuntime()
+                val url = ManagedRuntimeContract.buildStreamUrl(runtime.manifestUrl, type, videoId)
+                    ?: error("Invalid managed content identifier")
+                val payload = ManagedRuntimeRepository.fetchManagedText(url)
+                if (activeRequestKey != requestKey || ProfileRepository.activeProfileId != profileId ||
+                    ManagedDeviceStorage.generation() != generation ||
+                    (AuthRepository.state.value as? AuthState.Authenticated)?.userId != accountId) return@launch
+                val addonId = ManagedPlaybackPolicy.PREFIX + runtime.identity
+                val streams = StreamParser.parse(payload, ManagedPlaybackPolicy.NAME, addonId).filter {
+                    ManagedPlaybackPolicy.compatible(it, ManagedPlaybackCapabilities.av1Supported, ManagedPlaybackCapabilities.hevcSupported)
+                }
+                PlayerSettingsRepository.ensureLoaded()
+                val settings = PlayerSettingsRepository.uiState.value
+                val evaluation = StreamAutoPlaySelector.evaluateAutoPlayStream(
+                    streams = streams,
+                    mode = if (manualSelection) StreamAutoPlayMode.MANUAL else settings.streamAutoPlayMode,
+                    regexPattern = settings.streamAutoPlayRegex,
+                    source = StreamAutoPlaySource.ALL_SOURCES,
+                    installedAddonNames = setOf(ManagedPlaybackPolicy.NAME),
+                    selectedAddons = emptySet(),
+                    selectedPlugins = emptySet(),
+                )
+                _uiState.value = StreamsUiState(
+                    requestToken = token,
+                    groups = listOf(AddonStreamGroup(ManagedPlaybackPolicy.NAME, addonId, streams)),
+                    activeAddonIds = setOf(addonId),
+                    autoPlayDecided = true,
+                    autoPlayStream = evaluation.stream,
+                    autoPlayCandidates = evaluation.readyStreams,
+                    isDirectAutoPlayFlow = evaluation.stream != null,
+                    showDirectAutoPlayOverlay = evaluation.stream != null,
+                    emptyStateReason = if (streams.isEmpty()) StreamsEmptyStateReason.NoStreamsFound else null,
+                )
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                if (activeRequestKey != requestKey || ProfileRepository.activeProfileId != profileId ||
+                    (AuthRepository.state.value as? AuthState.Authenticated)?.userId != accountId ||
+                    (ManagedDeviceStorage.generation() != generation && !ManagedDeviceStorage.isBlocked())) return@launch
+                val session = ManagedDeviceSession.state.value
+                val message = when {
+                    ManagedDeviceStorage.isBlocked() -> "Manager access was revoked. Ask your administrator to permit enrollment, then sign out and sign in again."
+                    session is ManagedDeviceSessionState.Error -> session.message
+                    session is ManagedDeviceSessionState.Connecting -> "Connecting this phone to Manager. Try again in a moment."
+                    else -> "Managed access is unavailable. Check your Manager enrollment and sign in again if needed."
+                }
+                _uiState.value = StreamsUiState(
+                    requestToken = token,
+                    groups = listOf(AddonStreamGroup(ManagedPlaybackPolicy.NAME, "managed:unavailable", emptyList(),
+                        error = message)),
+                    autoPlayDecided = true,
+                    emptyStateReason = StreamsEmptyStateReason.StreamFetchFailed,
+                )
+            }
+        }
+    }
     fun consumeAutoPlay() {
         activeRequestKey = null
         _uiState.update {

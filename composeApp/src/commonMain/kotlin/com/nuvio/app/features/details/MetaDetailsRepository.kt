@@ -289,9 +289,9 @@ object MetaDetailsRepository {
 
         return try {
             TmdbSettingsRepository.ensureLoaded()
-            log.d { "Fetching meta from: $url" }
+            log.d { "Fetching metadata from configured addon" }
             val payload = fetchAddonResponseText(url)
-            log.d { "Raw payload length=${payload.length}, first 500 chars: ${payload.take(500)}" }
+            log.d { "Metadata response length=${payload.length}" }
             val result = MetaDetailsParser.parse(payload)
             val tmdbEnriched = withTimeoutOrNull(TMDB_ENRICH_TIMEOUT_MS) {
                 TmdbMetadataService.enrichMeta(
@@ -320,7 +320,7 @@ object MetaDetailsRepository {
             enriched
         } catch (e: Throwable) {
             if (e is CancellationException) throw e
-            log.e(e) { "Failed to fetch/parse meta from $url (manifest=${manifest.transportUrl})" }
+            log.w { "Metadata addon request failed (${e::class.simpleName})" }
             null
         }
     }

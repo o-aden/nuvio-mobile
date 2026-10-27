@@ -236,12 +236,9 @@ val supabaseProps = Properties().apply {
     if (propsFile.exists()) propsFile.inputStream().use { load(it) }
 }
 val appVersionConfigFile = rootProject.file("iosApp/Configuration/Version.xcconfig")
-val releaseAppVersionName = providers.gradleProperty("nuvio.app.versionName").orNull
-    ?: readXcconfigValue(appVersionConfigFile, "MARKETING_VERSION")
-    ?: error("MARKETING_VERSION is missing from ${appVersionConfigFile.path}")
-val releaseAppVersionCode = readXcconfigValue(appVersionConfigFile, "CURRENT_PROJECT_VERSION")
-    ?.toIntOrNull()
-    ?: error("CURRENT_PROJECT_VERSION is missing or invalid in ${appVersionConfigFile.path}")
+val releaseAppVersionName = providers.gradleProperty("nuvioplus.mobile.versionName").orNull ?: "0.1.0-beta.1"
+val releaseAppVersionCode = providers.gradleProperty("nuvioplus.mobile.versionCode").orNull?.toIntOrNull() ?: 1
+
 val iosDistribution = (
     providers.gradleProperty("nuvio.ios.distribution").orNull
         ?: System.getenv("NUVIO_IOS_DISTRIBUTION")
@@ -320,7 +317,7 @@ val generateRuntimeConfigs = tasks.register<GenerateRuntimeConfigsTask>("generat
     localPropertiesFile.set(rootProject.layout.projectDirectory.file("local.properties"))
     appVersionName.set(releaseAppVersionName)
     appVersionCode.set(releaseAppVersionCode)
-    supabaseUrl.set(runtimeConfigValue("NUVIO_SUPABASE_URL"))
+    supabaseUrl.set(runtimeConfigValue("NUVIO_SUPABASE_URL", "https://nuvio.adenstack.com"))
     supabaseAnonKey.set(runtimeConfigValue("NUVIO_SUPABASE_ANON_KEY"))
     supabaseFallbackUrl.set(runtimeConfigValue("NUVIO_SUPABASE_FALLBACK_URL"))
     sentryDsn.set(runtimeConfigValue("SENTRY_DSN"))

@@ -1,6 +1,8 @@
 package com.nuvio.app.core.auth
 
 import co.touchlab.kermit.Logger
+import com.nuvio.app.core.managed.ManagedDeviceSession
+import com.nuvio.app.core.network.ServerConfigurationRepository
 import com.nuvio.app.core.network.SupabaseProvider
 import com.nuvio.app.core.storage.LocalAccountDataCleaner
 import io.github.jan.supabase.auth.auth
@@ -63,8 +65,10 @@ object AuthRepository {
                             email = user?.email,
                             isAnonymous = false,
                         )
+                        ManagedDeviceSession.authenticated(userId, status.session.accessToken)
                     }
                     is SessionStatus.NotAuthenticated -> {
+                        ManagedDeviceSession.sessionLost()
                         _state.value = AuthState.Unauthenticated
                     }
                     is SessionStatus.Initializing -> {
@@ -126,8 +130,20 @@ object AuthRepository {
 
     suspend fun signInWithEmail(email: String, password: String): Result<Unit> = runCatching {
         _error.value = null
+        val resolved = when (
+            val resolution = ManagedUsernameLoginPolicy.resolve(
+                input = email,
+                supported = ManagedUsernameLoginPolicy.supportsUsernameLogin(ServerConfigurationRepository.active.value),
+            )
+        ) {
+            is ManagedUsernameLoginPolicy.Resolution.AuthIdentifier -> resolution.value
+            ManagedUsernameLoginPolicy.Resolution.InvalidUsername ->
+                error("Enter a valid email or a username with 3-24 letters, numbers, or underscores.")
+            ManagedUsernameLoginPolicy.Resolution.UnsupportedEnvironment ->
+                error("Username sign-in is available with the official Nuvio account server.")
+        }
         SupabaseProvider.client.auth.signInWith(Email) {
-            this.email = email
+            this.email = resolved
             this.password = password
         }
     }.onFailure { e ->
@@ -138,6 +154,7 @@ object AuthRepository {
 
     suspend fun signOut(): Result<Unit> {
         _error.value = null
+        val managedSignOut = runCatching { ManagedDeviceSession.signOut() }
         val anonymousRead = runCatching { AuthStorage.loadAnonymousUserId() }
         val wasAnonymous = anonymousRead.getOrNull() != null
         val anonymousClear = runCatching { AuthStorage.clearAnonymousUserId() }
@@ -157,7 +174,8 @@ object AuthRepository {
         val localCleanup = runCatching { LocalAccountDataCleaner.wipe() }
         _state.value = AuthState.Unauthenticated
 
-        val failure = anonymousRead.exceptionOrNull()
+        val failure = managedSignOut.exceptionOrNull()
+            ?: anonymousRead.exceptionOrNull()
             ?: anonymousClear.exceptionOrNull()
             ?: remoteSignOut.exceptionOrNull()
             ?: fallbackSessionClear.exceptionOrNull()
@@ -178,11 +196,12 @@ object AuthRepository {
 
     suspend fun prepareForServerSwitch(): Result<Unit> {
         _error.value = null
+        val managedSignOut = runCatching { ManagedDeviceSession.signOut() }
         val anonymousClear = runCatching { AuthStorage.clearAnonymousUserId() }
         validatedRemoteUserId = null
         val sessionClear = runCatching { SupabaseProvider.client.auth.clearSession() }
         _state.value = AuthState.Unauthenticated
-        val failure = anonymousClear.exceptionOrNull() ?: sessionClear.exceptionOrNull()
+        val failure = managedSignOut.exceptionOrNull() ?: anonymousClear.exceptionOrNull() ?: sessionClear.exceptionOrNull()
         val cancellation = sessionClear.exceptionOrNull() as? CancellationException
         if (cancellation != null) throw cancellation
         return if (failure == null) Result.success(Unit) else Result.failure(failure)
@@ -207,6 +226,8 @@ object AuthRepository {
 
     private suspend fun clearLocalSessionAfterRemoteInvalidation() {
         _error.value = null
+        runCatching { ManagedDeviceSession.sessionLost() }
+            .onFailure { error -> log.w(error) { "Managed device sign-out failed after Nuvio session invalidation" } }
         AuthStorage.clearAnonymousUserId()
         validatedRemoteUserId = null
         runCatching {
@@ -223,6 +244,7 @@ object AuthRepository {
 
     suspend fun deleteAccount(): Result<Unit> = runCatching {
         _error.value = null
+        ManagedDeviceSession.signOut()
         SupabaseProvider.client.functions.invoke("delete-account")
         SupabaseProvider.client.auth.signOut()
         validatedRemoteUserId = null

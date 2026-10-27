@@ -5,6 +5,17 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import com.nuvio.app.core.auth.AuthRepository
+import com.nuvio.app.core.auth.AuthState
+import com.nuvio.app.core.managed.ManagedRuntimeRepository
+import com.nuvio.app.features.profiles.ProfileRepository
+import com.nuvio.app.features.streams.ManagedPlaybackPolicy
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
 import androidx.compose.ui.Modifier
 import com.nuvio.app.core.ui.NuvioToastController
 import com.nuvio.app.features.party.PartyMedia
@@ -35,6 +46,36 @@ internal fun PlayerDestination(
         LaunchedEffect(route.launchId) {
             onBack()
         }
+        Box(modifier = Modifier.fillMaxSize())
+        return
+    }
+    val authState by AuthRepository.state.collectAsState()
+    val profileState by ProfileRepository.state.collectAsState()
+    val managed = ManagedRuntimeRepository.enabled &&
+        !launch.sourceUrl.startsWith("file:", true) && !launch.sourceUrl.startsWith("content:", true)
+    val activeProfileId = profileState.activeProfile?.profileIndex ?: ProfileRepository.activeProfileId
+    var authorized by remember(route.launchId, authState, activeProfileId) { mutableStateOf(!managed) }
+    LaunchedEffect(route.launchId, authState, activeProfileId) {
+        if (!managed) return@LaunchedEffect
+        try {
+            val auth = authState as? AuthState.Authenticated
+            check(auth != null && !auth.isAnonymous)
+            while (true) {
+                val runtime = ManagedRuntimeRepository.requireRuntime()
+                check(ManagedPlaybackPolicy.acceptsLaunch(launch.providerAddonId, runtime.identity,
+                    launch.profileId, activeProfileId))
+                authorized = true
+                delay(60_000)
+            }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            authorized = false
+            NuvioToastController.show("Managed access changed or is unavailable. Select the stream again after checking Manager.")
+            onBack()
+        }
+    }
+    if (!authorized) {
         Box(modifier = Modifier.fillMaxSize())
         return
     }

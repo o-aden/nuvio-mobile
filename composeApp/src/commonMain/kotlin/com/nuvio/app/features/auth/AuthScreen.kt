@@ -84,6 +84,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nuvio.app.core.auth.AuthRepository
+import com.nuvio.app.core.auth.ManagedUsernameLoginPolicy
+import com.nuvio.app.core.network.ServerConfigurationRepository
 import com.nuvio.app.core.auth.DeviceLinkAuthRepository
 import com.nuvio.app.core.auth.DeviceLinkAuthState
 import com.nuvio.app.core.build.AppFeaturePolicy
@@ -202,6 +204,9 @@ fun AuthScreen(
     var passwordFieldBounds by remember { mutableStateOf<Rect?>(null) }
     var showServerSheet by rememberSaveable { mutableStateOf(false) }
     var showOfficialServerDialog by rememberSaveable { mutableStateOf(false) }
+    val supportsManagedUsername = ManagedUsernameLoginPolicy.supportsUsernameLogin(
+        ServerConfigurationRepository.active.value,
+    )
 
     fun submitAuth() {
         if (email.isBlank() || password.length < 6 || isLoading) return
@@ -313,6 +318,7 @@ fun AuthScreen(
                         onCancelDeviceLink = DeviceLinkAuthRepository::cancel,
                         onEmailBoundsChange = { emailFieldBounds = it },
                         onPasswordBoundsChange = { passwordFieldBounds = it },
+                        supportsManagedUsername = supportsManagedUsername,
                     )
                 } else {
                     AuthMobileLayout(
@@ -345,6 +351,7 @@ fun AuthScreen(
                         onCancelDeviceLink = DeviceLinkAuthRepository::cancel,
                         onEmailBoundsChange = { emailFieldBounds = it },
                         onPasswordBoundsChange = { passwordFieldBounds = it },
+                        supportsManagedUsername = supportsManagedUsername,
                     )
                 }
             }
@@ -367,7 +374,6 @@ fun AuthScreen(
             )
         }
     }
-
     if (
         AppFeaturePolicy.customServerConnectionsEnabled &&
         showServerSheet &&
@@ -432,6 +438,7 @@ private fun AuthMobileLayout(
     onCancelDeviceLink: () -> Unit,
     onEmailBoundsChange: (Rect) -> Unit,
     onPasswordBoundsChange: (Rect) -> Unit,
+    supportsManagedUsername: Boolean,
 ) {
     Column(
         modifier = Modifier
@@ -493,6 +500,7 @@ private fun AuthMobileLayout(
                 onCancelDeviceLink = onCancelDeviceLink,
                 onEmailBoundsChange = onEmailBoundsChange,
                 onPasswordBoundsChange = onPasswordBoundsChange,
+                supportsManagedUsername = supportsManagedUsername,
             )
         }
     }
@@ -524,6 +532,7 @@ private fun AuthLargeLayout(
     onCancelDeviceLink: () -> Unit,
     onEmailBoundsChange: (Rect) -> Unit,
     onPasswordBoundsChange: (Rect) -> Unit,
+    supportsManagedUsername: Boolean,
 ) {
     Row(
         modifier = modifier,
@@ -623,6 +632,7 @@ private fun AuthLargeLayout(
                     onCancelDeviceLink = onCancelDeviceLink,
                     onEmailBoundsChange = onEmailBoundsChange,
                     onPasswordBoundsChange = onPasswordBoundsChange,
+                        supportsManagedUsername = supportsManagedUsername,
                 )
             }
         }
@@ -712,6 +722,7 @@ private fun AuthForm(
     onCancelDeviceLink: () -> Unit,
     onEmailBoundsChange: (Rect) -> Unit,
     onPasswordBoundsChange: (Rect) -> Unit,
+    supportsManagedUsername: Boolean,
 ) {
     val uriHandler = LocalUriHandler.current
     Column(
@@ -720,7 +731,8 @@ private fun AuthForm(
         AuthTextField(
             value = email,
             onValueChange = onEmailChange,
-            placeholder = stringResource(Res.string.compose_auth_email),
+            placeholder = if (!isSignUp && supportsManagedUsername) "Email or username"
+                else stringResource(Res.string.compose_auth_email),
             icon = Icons.Rounded.Email,
             metrics = metrics,
             scale = scale,

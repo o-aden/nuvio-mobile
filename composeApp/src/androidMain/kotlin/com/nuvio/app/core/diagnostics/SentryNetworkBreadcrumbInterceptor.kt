@@ -60,11 +60,11 @@ class SentryNetworkBreadcrumbInterceptor : Interceptor {
         breadcrumb.setCategory("http.client")
         breadcrumb.setLevel(levelFor(statusCode, error))
         breadcrumb.setData("host", url.host)
-        breadcrumb.setData("path", url.encodedPath)
+        breadcrumb.setData("path", "[redacted]")
         breadcrumb.setData("elapsed_ms", elapsedMs)
         if (error != null) {
             breadcrumb.setData("error_type", error.javaClass.name)
-            error.message?.let { breadcrumb.setData("error_message", it.take(240)) }
+
         }
         Sentry.addBreadcrumb(breadcrumb)
     }
@@ -79,12 +79,7 @@ class SentryNetworkBreadcrumbInterceptor : Interceptor {
         }
     }
 
-    private fun scrubbedUrl(url: HttpUrl): String =
-        url.newBuilder()
-            .query(null)
-            .fragment(null)
-            .build()
-            .toString()
+    private fun scrubbedUrl(url: HttpUrl): String = "${url.scheme}://${url.host}/[redacted]"
 
     private fun elapsedMs(startedAtNs: Long): Long =
         (System.nanoTime() - startedAtNs) / 1_000_000L

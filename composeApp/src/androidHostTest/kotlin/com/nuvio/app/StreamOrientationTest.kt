@@ -5,6 +5,10 @@ import android.app.Application
 import android.content.pm.ActivityInfo
 import androidx.compose.ui.test.junit4.createComposeRule
 import com.nuvio.app.core.ui.NuvioTheme
+import com.nuvio.app.core.network.ServerCapabilities
+import com.nuvio.app.core.network.ServerConfiguration
+import com.nuvio.app.core.network.ServerConfigurationRepository
+import com.nuvio.app.core.network.ServerConfigurationStorage
 import com.nuvio.app.features.addons.AddonRepository
 import com.nuvio.app.features.addons.AddonStorage
 import com.nuvio.app.features.details.MetaDetailsRepository
@@ -49,10 +53,21 @@ import kotlin.test.assertNotNull
 class StreamOrientationTest {
     @get:Rule
     val compose = createComposeRule()
+    private var previousCustomConfiguration: ServerConfiguration? = null
 
     @BeforeTest
     fun initialize() {
         val context = RuntimeEnvironment.getApplication()
+        ServerConfigurationStorage.initialize(context)
+        previousCustomConfiguration = ServerConfigurationStorage.loadCustom()
+        check(ServerConfigurationRepository.saveCustom(
+            ServerConfiguration(
+                backendUrl = "https://orientation-test.example",
+                publishableKey = "orientation-test-key",
+                capabilities = ServerCapabilities(emailPasswordAuth = true, tvLogin = false),
+                isCustom = true,
+            ),
+        ))
         PlayerSettingsStorage.initialize(context)
         AddonStorage.initialize(context)
         BingeGroupCacheStorage.initialize(context)
@@ -67,6 +82,11 @@ class StreamOrientationTest {
 
     @AfterTest
     fun clearState() {
+        if (previousCustomConfiguration == null) {
+            ServerConfigurationRepository.useOfficial()
+        } else {
+            ServerConfigurationRepository.saveCustom(previousCustomConfiguration!!)
+        }
         PlayerSettingsRepository.clearLocalState()
         StreamsRepository.clear()
         StreamLaunchStore.clear()
@@ -78,6 +98,7 @@ class StreamOrientationTest {
     @Test
     fun openingManualStreamListWithNoCachedLinkDoesNotRequestLandscape() {
         PlayerSettingsRepository.ensureLoaded()
+        PlayerSettingsRepository.setStreamAutoPlayMode(StreamAutoPlayMode.MANUAL)
         PlayerSettingsRepository.setStreamReuseLastLinkEnabled(true)
         openStreamList(manualSelection = false)
         assertNoLandscapeRequest()
@@ -86,14 +107,16 @@ class StreamOrientationTest {
     @Test
     fun openingManualStreamListWithNoSavedBingeGroupDoesNotRequestLandscape() {
         PlayerSettingsRepository.ensureLoaded()
+        PlayerSettingsRepository.setStreamAutoPlayMode(StreamAutoPlayMode.MANUAL)
         PlayerSettingsRepository.setStreamAutoPlayReuseBingeGroup(true)
         openStreamList(manualSelection = false)
         assertNoLandscapeRequest()
     }
 
     @Test
-    fun openingManualStreamListWithDefaultSettingsDoesNotRequestLandscape() {
+    fun openingManualStreamListWithManualAutoPlaySettingDoesNotRequestLandscape() {
         PlayerSettingsRepository.ensureLoaded()
+        PlayerSettingsRepository.setStreamAutoPlayMode(StreamAutoPlayMode.MANUAL)
         openStreamList(manualSelection = false)
         assertNoLandscapeRequest()
     }
@@ -101,6 +124,7 @@ class StreamOrientationTest {
     @Test
     fun explicitManualSelectionDoesNotRequestLandscape() {
         PlayerSettingsRepository.ensureLoaded()
+        PlayerSettingsRepository.setStreamAutoPlayMode(StreamAutoPlayMode.MANUAL)
         PlayerSettingsRepository.setStreamReuseLastLinkEnabled(true)
         openStreamList(manualSelection = true)
         assertNoLandscapeRequest()

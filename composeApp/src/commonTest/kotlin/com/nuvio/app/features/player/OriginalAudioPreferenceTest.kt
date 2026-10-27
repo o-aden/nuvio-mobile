@@ -262,7 +262,10 @@ class OriginalAudioPreferenceTest {
         val controller = RecordingController(audioTracks())
         val runtime = runtime(controller, contentLanguage = originalLanguage)
         runtime.refreshTracks()
-        runtime.playerSettingsUiState = runtime.playerSettingsUiState.copy(preferredAudioLanguage = AudioLanguageOption.DEFAULT)
+        runtime.playerSettingsUiState = runtime.playerSettingsUiState.copy(
+            preferredAudioLanguage = AudioLanguageOption.DEFAULT,
+            secondaryPreferredAudioLanguage = null,
+        )
 
         runtime.refreshTracks()
 
