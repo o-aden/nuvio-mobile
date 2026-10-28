@@ -3,6 +3,7 @@ package com.nuvio.app.features.updater
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class AppUpdaterRepositoryTest {
     @Test
@@ -42,6 +43,22 @@ class AppUpdaterRepositoryTest {
                 {"name": "app.apk", "browser_download_url": "https://example.com/beta10.apk"}]}
         ]"""
         assertEquals("1.1.0-beta.10", select(response, UpdateChannel.BETA)?.tag)
+    }
+
+    @Test
+    fun betaChannelDiscoversBetaTwoForBetaOneInstallations() {
+        val response = """[
+            {"tag_name":"0.1.0-beta.2","name":"Nuvio+ Mobile 0.1.0-beta.2","prerelease":true,"assets":[
+                {"name":"androidApp-full-universal-release.apk","browser_download_url":"https://example.com/mobile-beta-2.apk","content_type":"application/vnd.android.package-archive"}]},
+            {"tag_name":"0.1.0-beta.1","name":"Nuvio+ Mobile 0.1.0-beta.1","prerelease":true,"assets":[
+                {"name":"androidApp-full-universal-release.apk","browser_download_url":"https://example.com/mobile-beta-1.apk"}]}
+        ]"""
+
+        val update = select(response, UpdateChannel.BETA)
+
+        assertEquals("0.1.0-beta.2", update?.tag)
+        assertEquals("androidApp-full-universal-release.apk", update?.assetName)
+        assertTrue(VersionUtils.isRemoteNewer(update?.tag, "0.1.0-beta.1"))
     }
 
     @Test

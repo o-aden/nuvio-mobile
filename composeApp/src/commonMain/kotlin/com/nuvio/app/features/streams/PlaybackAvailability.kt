@@ -5,6 +5,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nuvio.app.core.build.AppFeaturePolicy
+import com.nuvio.app.core.managed.ManagedRuntimeRepository
+import com.nuvio.app.core.network.ServerConfigurationRepository
 import com.nuvio.app.features.addons.AddonManifest
 import com.nuvio.app.features.addons.AddonRepository
 import com.nuvio.app.features.addons.ManagedAddon
@@ -30,9 +32,11 @@ internal fun hasCompatiblePlaybackSource(
 internal class PlaybackAvailability(
     private val addons: List<ManagedAddon>,
     private val plugins: PluginsUiState,
+    private val managedSourceEnabled: Boolean = false,
 ) {
     fun canStream(type: String, videoId: String): Boolean =
-        hasCompatiblePlaybackSource(addons, plugins, type, videoId) ||
+        managedSourceEnabled ||
+            hasCompatiblePlaybackSource(addons, plugins, type, videoId) ||
             MetaDetailsRepository.findEmbeddedStreams(videoId).isNotEmpty() ||
             ServerStreams.canServe(type, videoId)
 
@@ -57,6 +61,9 @@ internal class PlaybackAvailability(
             } else {
                 PluginsUiState(pluginsEnabled = false)
             },
+            // This opens navigation only. loadManaged() still performs the fresh authenticated
+            // runtime check and enforces enrollment, account, profile, and revocation state.
+            managedSourceEnabled = ManagedRuntimeRepository.enabled,
         )
     }
 }
@@ -84,7 +91,9 @@ internal fun rememberPlaybackAvailability(): PlaybackAvailability {
         ServerRepository.ensureLoaded()
         ServerRepository.uiState
     }.collectAsStateWithLifecycle()
-    return remember(addons, plugins, downloads, servers.revision) {
-        PlaybackAvailability(addons.addons, plugins)
+    val serverConfiguration by remember { ServerConfigurationRepository.active }.collectAsStateWithLifecycle()
+    val managedSourceEnabled = ManagedRuntimeRepository.enabled
+    return remember(addons, plugins, downloads, servers.revision, serverConfiguration, managedSourceEnabled) {
+        PlaybackAvailability(addons.addons, plugins, managedSourceEnabled)
     }
 }

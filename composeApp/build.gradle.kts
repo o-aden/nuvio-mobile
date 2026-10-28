@@ -236,8 +236,8 @@ val supabaseProps = Properties().apply {
     if (propsFile.exists()) propsFile.inputStream().use { load(it) }
 }
 val appVersionConfigFile = rootProject.file("iosApp/Configuration/Version.xcconfig")
-val releaseAppVersionName = providers.gradleProperty("nuvioplus.mobile.versionName").orNull ?: "0.1.0-beta.1"
-val releaseAppVersionCode = providers.gradleProperty("nuvioplus.mobile.versionCode").orNull?.toIntOrNull() ?: 1
+val releaseAppVersionName = providers.gradleProperty("nuvioplus.mobile.versionName").orNull ?: "0.1.0-beta.2"
+val releaseAppVersionCode = providers.gradleProperty("nuvioplus.mobile.versionCode").orNull?.toIntOrNull() ?: 2
 
 val iosDistribution = (
     providers.gradleProperty("nuvio.ios.distribution").orNull

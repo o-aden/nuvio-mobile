@@ -54,6 +54,40 @@ class PlaybackAvailabilityTest {
         ))
     }
 
+    @Test
+    fun `managed source opens movie episode continue watching and manual stream gates`() {
+        val availability = PlaybackAvailability(
+            addons = emptyList(),
+            plugins = PluginsUiState(),
+            managedSourceEnabled = true,
+        )
+
+        // Details movie and episode play/manual-selection actions share canStream().
+        assertTrue(availability.canStream("movie", "tmdb:movie-1"))
+        assertTrue(availability.canStream("series", "tmdb:episode-1"))
+
+        // Continue Watching uses canPlay(), which delegates to the same source gate.
+        assertTrue(availability.canPlay(
+            type = "series",
+            videoId = "tmdb:episode-1",
+            parentMetaId = "tmdb:show-1",
+            seasonNumber = 1,
+            episodeNumber = 2,
+        ))
+    }
+
+    @Test
+    fun `manager source does not enable playback when its backend is disabled`() {
+        val availability = PlaybackAvailability(
+            addons = emptyList(),
+            plugins = PluginsUiState(),
+            managedSourceEnabled = false,
+        )
+
+        assertFalse(availability.canStream("movie", "tmdb:movie-1"))
+        assertFalse(availability.canStream("series", "tmdb:episode-1"))
+    }
+
     private fun available(
         addons: List<ManagedAddon> = emptyList(),
         plugins: PluginsUiState = PluginsUiState(),

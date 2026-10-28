@@ -41,9 +41,9 @@ No server service-role/admin keys belong in the app. No unrelated auth fallback 
 
 Override version values with `'-Pnuvioplus.mobile.versionName=...'` and `'-Pnuvioplus.mobile.versionCode=...'`.
 The debug APK is generated at `androidApp/build/outputs/apk/full/debug/androidApp-full-debug.apk`.
-Release signing requires a separately approved Mobile signing configuration. Never overwrite TV signing assets.
+Mobile release signing uses a dedicated identity separate from TV. See `scripts/MOBILE_RELEASE.md` for the protected local signing setup and Beta publishing command.
 The APK updater checks this fork only; it cannot offer upstream APKs with a different application/signing identity.
-No APK publication or release workflow is part of this task.
+The signed Mobile Beta release and repeatable publishing command are documented in `scripts/MOBILE_RELEASE.md`.
 
 ## Enrollment, authorization and recovery
 
