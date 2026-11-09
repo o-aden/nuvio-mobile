@@ -101,8 +101,12 @@ import nuvio.composeapp.generated.resources.compose_auth_continue_without_accoun
 import nuvio.composeapp.generated.resources.compose_auth_create_account
 import nuvio.composeapp.generated.resources.compose_auth_dont_have_account
 import nuvio.composeapp.generated.resources.compose_auth_email
+import nuvio.composeapp.generated.resources.compose_auth_email_required
+import nuvio.composeapp.generated.resources.compose_auth_email_or_username_required
 import nuvio.composeapp.generated.resources.compose_auth_or_separator
 import nuvio.composeapp.generated.resources.compose_auth_password
+import nuvio.composeapp.generated.resources.compose_auth_password_required
+import nuvio.composeapp.generated.resources.compose_auth_password_too_short
 import nuvio.composeapp.generated.resources.compose_auth_sign_in
 import nuvio.composeapp.generated.resources.compose_auth_sign_in_subtitle
 import nuvio.composeapp.generated.resources.compose_auth_sign_up
@@ -113,6 +117,7 @@ import nuvio.composeapp.generated.resources.compose_auth_terms_link
 import nuvio.composeapp.generated.resources.compose_auth_terms_prefix
 import nuvio.composeapp.generated.resources.compose_auth_welcome_back
 import org.jetbrains.compose.resources.stringResource
+import org.jetbrains.compose.resources.StringResource
 
 internal val AuthTextPrimary = Color(0xFFF5F7F8)
 internal val AuthTextSecondary = Color(0xFF969CA3)
@@ -199,7 +204,8 @@ fun AuthScreen(
     var email by rememberSaveable { mutableStateOf("") }
     var password by rememberSaveable { mutableStateOf("") }
     var passwordVisible by rememberSaveable { mutableStateOf(false) }
-    var isLoading by rememberSaveable { mutableStateOf(false) }
+    var isLoading by remember { mutableStateOf(false) }
+    var validationError by remember { mutableStateOf<StringResource?>(null) }
     var emailFieldBounds by remember { mutableStateOf<Rect?>(null) }
     var passwordFieldBounds by remember { mutableStateOf<Rect?>(null) }
     var showServerSheet by rememberSaveable { mutableStateOf(false) }
@@ -207,29 +213,47 @@ fun AuthScreen(
     val supportsManagedUsername = ManagedUsernameLoginPolicy.supportsUsernameLogin(
         ServerConfigurationRepository.active.value,
     )
+    val formError = validationError?.let { stringResource(it) } ?: authError
+
+    fun clearFormError() {
+        validationError = null
+        AuthRepository.clearError()
+    }
 
     fun submitAuth() {
-        if (email.isBlank() || password.length < 6 || isLoading) return
+        if (isLoading) return
+        clearFormError()
+        validationError = when {
+            email.isBlank() && !isSignUp && supportsManagedUsername -> Res.string.compose_auth_email_or_username_required
+            email.isBlank() -> Res.string.compose_auth_email_required
+            password.isEmpty() -> Res.string.compose_auth_password_required
+            isSignUp && password.length < 6 -> Res.string.compose_auth_password_too_short
+            else -> null
+        }
+        if (validationError != null) return
         DeviceLinkAuthRepository.cancel()
         isLoading = true
         focusManager.clearFocus(force = true)
         scope.launch {
-            if (isSignUp) AuthRepository.signUpWithEmail(email, password)
-            else AuthRepository.signInWithEmail(email, password)
-            isLoading = false
+            try {
+                if (isSignUp) AuthRepository.signUpWithEmail(email, password)
+                else AuthRepository.signInWithEmail(email, password)
+            } finally {
+                isLoading = false
+            }
         }
     }
 
     fun toggleAuthMode() {
         DeviceLinkAuthRepository.cancel()
         isSignUp = !isSignUp
-        AuthRepository.clearError()
+        clearFormError()
     }
 
     fun startDeviceLink() {
         if (isLoading) return
         focusManager.clearFocus(force = true)
-        AuthRepository.clearError()
+        clearFormError()
         DeviceLinkAuthRepository.start()
     }
 
@@ -290,7 +314,7 @@ fun AuthScreen(
                         password = password,
                         passwordVisible = passwordVisible,
                         isLoading = isLoading,
-                        authError = authError,
+                        authError = formError,
                         deviceLinkAuthState = deviceLinkAuthState,
                         deviceLinkEnabled = serverConnectionState.activeServer.capabilities.tvLogin,
                         formPaneWidth = if (compactLargeScreen) 460.dp else formPaneWidth,
@@ -300,11 +324,11 @@ fun AuthScreen(
                         scale = largeScale,
                         onEmailChange = {
                             email = it
-                            AuthRepository.clearError()
+                            clearFormError()
                         },
                         onPasswordChange = {
                             password = it
-                            AuthRepository.clearError()
+                            clearFormError()
                         },
                         onPasswordVisibilityToggle = { passwordVisible = !passwordVisible },
                         onSubmit = ::submitAuth,
@@ -327,17 +351,17 @@ fun AuthScreen(
                         password = password,
                         passwordVisible = passwordVisible,
                         isLoading = isLoading,
-                        authError = authError,
+                        authError = formError,
                         deviceLinkAuthState = deviceLinkAuthState,
                         deviceLinkEnabled = serverConnectionState.activeServer.capabilities.tvLogin,
                         statusBarTop = statusBarTop,
                         onEmailChange = {
                             email = it
-                            AuthRepository.clearError()
+                            clearFormError()
                         },
                         onPasswordChange = {
                             password = it
-                            AuthRepository.clearError()
+                            clearFormError()
                         },
                         onPasswordVisibilityToggle = { passwordVisible = !passwordVisible },
                         onSubmit = ::submitAuth,

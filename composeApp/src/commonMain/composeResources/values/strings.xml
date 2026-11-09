@@ -350,6 +350,8 @@
     <string name="compose_auth_create_account">Create Account</string>
     <string name="compose_auth_dont_have_account">Don't have an account? </string>
     <string name="compose_auth_email">Email</string>
+    <string name="compose_auth_email_required">Enter your email address</string>
+    <string name="compose_auth_email_or_username_required">Enter your email address or username</string>
     <string name="compose_auth_link_cancel">Cancel</string>
     <string name="compose_auth_link_code_expired">This code expired.</string>
     <string name="compose_auth_link_creating_code">Creating code…</string>
@@ -362,6 +364,8 @@
     <string name="compose_auth_link_waiting">Waiting for approval…</string>
     <string name="compose_auth_or_separator">  or  </string>
     <string name="compose_auth_password">Password</string>
+    <string name="compose_auth_password_required">Enter your password</string>
+    <string name="compose_auth_password_too_short">Use a password with at least 6 characters</string>
     <string name="compose_auth_sign_in_subtitle">Sign in to access your library and progress</string>
     <string name="compose_auth_sign_in">Sign In</string>
     <string name="compose_auth_sign_up_subtitle">Sign up to sync your data across devices</string>
