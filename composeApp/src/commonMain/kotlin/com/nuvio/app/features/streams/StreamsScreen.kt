@@ -59,6 +59,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import com.nuvio.app.core.build.AppFeaturePolicy
+import com.nuvio.app.core.managed.ManagedRuntimeRepository
 import com.nuvio.app.core.ui.NuvioBackButton
 import com.nuvio.app.core.ui.NuvioBottomSheetActionRow
 import com.nuvio.app.core.ui.NuvioBottomSheetDivider
@@ -66,6 +67,7 @@ import com.nuvio.app.core.ui.NuvioModalBottomSheet
 import com.nuvio.app.core.ui.NuvioToastController
 import com.nuvio.app.core.ui.dismissNuvioBottomSheet
 import com.nuvio.app.features.downloads.DownloadsRepository
+import com.nuvio.app.features.downloads.isSupportedDownloadUrl
 import com.nuvio.app.features.details.MetaScreenSettingsRepository
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -80,11 +82,13 @@ import com.nuvio.app.features.debrid.DirectDebridPlayableResult
 import com.nuvio.app.features.debrid.DirectDebridPlaybackResolver
 import com.nuvio.app.features.debrid.toastMessage
 import com.nuvio.app.features.player.PlayerSettingsRepository
+import com.nuvio.app.features.profiles.ProfileRepository
 import com.nuvio.app.features.watchprogress.WatchProgressRepository
 import com.nuvio.app.features.watchprogress.WatchProgressEntry
 import com.nuvio.app.features.watched.WatchedRepository
 import com.nuvio.app.features.watched.watchedItemKeys
 import com.nuvio.app.navigation.LocalUseNativeNavigation
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 import nuvio.composeapp.generated.resources.*
@@ -101,6 +105,7 @@ fun StreamsScreen(
     parentMetaId: String,
     parentMetaType: String,
     title: String,
+    launchProfileId: Int,
     logo: String? = null,
     poster: String? = null,
     background: String? = null,
@@ -226,41 +231,38 @@ fun StreamsScreen(
     }
 
     val downloadStream: (StreamItem) -> Unit = { stream ->
-        if (DirectDebridPlaybackResolver.shouldResolveToPlayableStream(stream)) {
-            downloadScope.launch {
+        downloadScope.launch {
+            if (ManagedRuntimeRepository.enabled) {
+                try {
+                    val runtime = ManagedRuntimeRepository.requireRuntime()
+                    check(ManagedPlaybackPolicy.acceptsLaunch(
+                        stream.addonId, runtime.identity, launchProfileId, ProfileRepository.activeProfileId,
+                    ))
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    NuvioToastController.show("Managed access changed or is unavailable. Select the stream again.")
+                    return@launch
+                }
+            }
+
+            val downloadSource = if (DirectDebridPlaybackResolver.shouldResolveToPlayableStream(stream)) {
                 val resolved = DirectDebridPlaybackResolver.resolveToPlayableStream(
                     stream = stream,
                     season = seasonNumber,
                     episode = episodeNumber,
                 )
                 when (resolved) {
-                    is DirectDebridPlayableResult.Success -> {
-                        val result = DownloadsRepository.enqueueFromStream(
-                            contentType = type,
-                            videoId = videoId,
-                            parentMetaId = parentMetaId,
-                            parentMetaType = parentMetaType,
-                            title = title,
-                            logo = logo,
-                            poster = poster,
-                            background = background,
-                            seasonNumber = seasonNumber,
-                            episodeNumber = episodeNumber,
-                            episodeTitle = episodeTitle,
-                            episodeThumbnail = episodeThumbnail,
-                            stream = resolved.stream,
-                        )
-                        NuvioToastController.show(result.toastMessage())
-                    }
+                    is DirectDebridPlayableResult.Success -> resolved.stream
                     else -> {
-                        val message = resolved.toastMessage()
-                        if (message != null) {
-                            NuvioToastController.show(message)
-                        }
+                        resolved.toastMessage()?.let { NuvioToastController.show(it) }
+                        return@launch
                     }
                 }
+            } else {
+                stream
             }
-        } else {
+
             val result = DownloadsRepository.enqueueFromStream(
                 contentType = type,
                 videoId = videoId,
@@ -274,7 +276,7 @@ fun StreamsScreen(
                 episodeNumber = episodeNumber,
                 episodeTitle = episodeTitle,
                 episodeThumbnail = episodeThumbnail,
-                stream = stream,
+                stream = downloadSource,
             )
             NuvioToastController.show(result.toastMessage())
         }
@@ -1233,4 +1235,6 @@ private fun FooterLoadingBlock(
 }
 
 private fun StreamItem.canShowDownloadAction(): Boolean =
-    playableDirectUrl != null || DirectDebridPlaybackResolver.shouldResolveToPlayableStream(this)
+    (!ManagedRuntimeRepository.enabled || addonId.startsWith(ManagedPlaybackPolicy.PREFIX)) &&
+        (playableDirectUrl?.isSupportedDownloadUrl() == true ||
+            DirectDebridPlaybackResolver.shouldResolveToPlayableStream(this))

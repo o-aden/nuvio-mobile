@@ -809,6 +809,7 @@ internal fun StreamDestination(
         ) {
             StreamsScreen(
                 showLoadingScreen = showLoadingScreen,
+                launchProfileId = launch.profileId,
                 type = launch.type,
                 videoId = effectiveVideoId,
                 parentMetaId = launch.parentMetaId ?: effectiveVideoId,
