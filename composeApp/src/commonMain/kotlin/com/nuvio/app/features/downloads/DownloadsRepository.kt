@@ -109,6 +109,12 @@ object DownloadsRepository {
         return resolvedUri
     }
 
+    internal fun hasDownload(parentMetaId: String, seasonNumber: Int?, episodeNumber: Int?): Boolean {
+        ensureLoaded()
+        val logicalKey = buildLogicalKey(parentMetaId, seasonNumber, episodeNumber)
+        return _uiState.value.items.any { it.logicalContentKey == logicalKey }
+    }
+
     fun enqueueFromStream(
         contentType: String,
         videoId: String,
@@ -124,7 +130,9 @@ object DownloadsRepository {
         episodeThumbnail: String?,
         stream: StreamItem,
     ): DownloadEnqueueResult {
-        ensureLoaded()
+        if (hasDownload(parentMetaId, seasonNumber, episodeNumber)) {
+            return DownloadEnqueueResult.AlreadyExists
+        }
 
         val sourceUrl = stream.playableDirectUrl
             ?.trim()
@@ -136,23 +144,6 @@ object DownloadsRepository {
         }
 
         val now = DownloadsClock.nowEpochMs()
-        val logicalKey = buildLogicalKey(
-            parentMetaId = parentMetaId,
-            seasonNumber = seasonNumber,
-            episodeNumber = episodeNumber,
-        )
-
-        var replacedExisting = false
-        val currentItems = _uiState.value.items.toMutableList()
-        val existing = currentItems.firstOrNull { it.logicalContentKey == logicalKey }
-        if (existing != null) {
-            replacedExisting = true
-            activeHandles.remove(existing.id)?.cancel()
-            DownloadsPlatformDownloader.removeFile(playableLocalFileUri(existing) ?: existing.localFileUri)
-            DownloadsPlatformDownloader.removePartialFile(existing.fileName)
-            currentItems.removeAll { it.id == existing.id }
-        }
-
         val downloadId = nextDownloadId(now)
         val fileName = buildFileName(
             title = title,
@@ -197,16 +188,11 @@ object DownloadsRepository {
             updatedAtEpochMs = now,
         )
 
-        currentItems.add(0, item)
-        publish(currentItems)
+        publish(listOf(item) + _uiState.value.items)
         persist()
         startDownload(item)
 
-        return if (replacedExisting) {
-            DownloadEnqueueResult.Replaced
-        } else {
-            DownloadEnqueueResult.Started
-        }
+        return DownloadEnqueueResult.Started
     }
 
     fun pauseDownload(downloadId: String) {

@@ -87,6 +87,7 @@ import com.nuvio.app.core.ui.verticalBarWidth
 import com.nuvio.app.core.ui.NuvioCardDepthSurface
 import com.nuvio.app.core.ui.NuvioPosterZoomActionOverlay
 import com.nuvio.app.core.ui.NuvioToastController
+import com.nuvio.app.core.managed.ManagedRuntimeRepository
 import com.nuvio.app.core.ui.PosterZoomAnchor
 import com.nuvio.app.core.ui.PosterZoomAnchorHolder
 import com.nuvio.app.core.ui.PosterZoomOverlayAction
@@ -792,6 +793,16 @@ fun MetaDetailsScreen(
                     }
                 }
                 val primaryVideoId = seriesStreamVideoId ?: seriesAction?.videoId ?: meta.id
+                val onMovieDownload: (() -> Unit)? = if (ManagedRuntimeRepository.enabled && meta.type == "movie") {
+                    { DetailsDownloads.start(meta, episode = null, profileId = shuffleProfileId) }
+                } else {
+                    null
+                }
+                val onEpisodeDownload: ((MetaVideo) -> Unit)? = if (ManagedRuntimeRepository.enabled && hasEpisodes) {
+                    { episode -> DetailsDownloads.start(meta, episode, shuffleProfileId) }
+                } else {
+                    null
+                }
                 val shufflePoolEmpty = shuffleSettings.enabled && seriesAction == null
                 val isPrimaryPlayEnabled = shufflePoolEmpty || playbackAvailability.canPlay(
                     type = meta.type,
@@ -1186,6 +1197,7 @@ fun MetaDetailsScreen(
                                                         onWatchedClick = toggleWatched,
                                                         onSaveClick = toggleSaved,
                                                         onSaveLongClick = openLibraryListPicker,
+                                                        onDownloadClick = onMovieDownload,
                                                     )
                                                 }
                                             } else {
@@ -1233,6 +1245,7 @@ fun MetaDetailsScreen(
                                     isSaved = isSaved,
                                     isWatched = isWatched,
                                     onPrimaryPlayClick = onPrimaryPlayClick,
+                                    onMovieDownload = onMovieDownload,
                                     onShuffleClick = onShuffleClick,
                                     shuffleEnabled = shuffleSettings.enabled,
                                     onPrimaryPlayLongClick = onPrimaryPlayLongClick,
@@ -1297,6 +1310,7 @@ fun MetaDetailsScreen(
                                     fullyWatchedSeriesKeys = fullyWatchedSeriesKeys,
                                     blurUnwatchedEpisodes = metaScreenSettingsUiState.blurUnwatchedEpisodes,
                                     onEpisodeClick = onEpisodePlayClick,
+                                    onEpisodeDownload = onEpisodeDownload,
                                     onEpisodeLongPress = { video ->
                                         selectedEpisodeZoomAnchor = PosterZoomAnchorHolder.consume()
                                         selectedEpisodeForActions = video
@@ -1923,6 +1937,7 @@ private fun LazyListScope.configuredMetaSectionItems(
     isSaved: Boolean,
     isWatched: Boolean,
     onPrimaryPlayClick: () -> Unit,
+    onMovieDownload: (() -> Unit)?,
     onShuffleClick: (() -> Unit)?,
     shuffleEnabled: Boolean,
     onPrimaryPlayLongClick: (() -> Unit)?,
@@ -1959,6 +1974,7 @@ private fun LazyListScope.configuredMetaSectionItems(
     fullyWatchedSeriesKeys: Set<String> = emptySet(),
     blurUnwatchedEpisodes: Boolean,
     onEpisodeClick: (MetaVideo) -> Unit,
+    onEpisodeDownload: ((MetaVideo) -> Unit)?,
     onEpisodeLongPress: (MetaVideo) -> Unit,
     onSeasonLongPress: (Int) -> Unit,
     onOpenMeta: ((MetaPreview) -> Unit)?,
@@ -2008,6 +2024,7 @@ private fun LazyListScope.configuredMetaSectionItems(
                     isSaved = isSaved,
                     isWatched = isWatched,
                     onPrimaryPlayClick = onPrimaryPlayClick,
+                    onMovieDownload = onMovieDownload,
                     onShuffleClick = onShuffleClick,
                     shuffleEnabled = shuffleEnabled,
                     onPrimaryPlayLongClick = onPrimaryPlayLongClick,
@@ -2040,6 +2057,7 @@ private fun LazyListScope.configuredMetaSectionItems(
                     fullyWatchedSeriesKeys = fullyWatchedSeriesKeys,
                     blurUnwatchedEpisodes = blurUnwatchedEpisodes,
                     onEpisodeClick = onEpisodeClick,
+                    onEpisodeDownload = onEpisodeDownload,
                     onEpisodeLongPress = onEpisodeLongPress,
                     onSeasonLongPress = onSeasonLongPress,
                     onOpenMeta = onOpenMeta,
@@ -2098,6 +2116,7 @@ private fun LazyListScope.configuredMetaSectionItems(
                     episodeRatingsVisibility = settings.episodeRatingsVisibility,
                     blurUnwatchedEpisodes = blurUnwatchedEpisodes,
                     onEpisodeClick = onEpisodeClick,
+                    onEpisodeDownload = onEpisodeDownload,
                     onEpisodeLongPress = onEpisodeLongPress,
                 )
             }
@@ -2237,6 +2256,7 @@ private fun ConfiguredMetaSections(
     isSaved: Boolean,
     isWatched: Boolean,
     onPrimaryPlayClick: () -> Unit,
+    onMovieDownload: (() -> Unit)?,
     onShuffleClick: (() -> Unit)?,
     shuffleEnabled: Boolean,
     onPrimaryPlayLongClick: (() -> Unit)?,
@@ -2269,6 +2289,7 @@ private fun ConfiguredMetaSections(
     fullyWatchedSeriesKeys: Set<String> = emptySet(),
     blurUnwatchedEpisodes: Boolean,
     onEpisodeClick: (MetaVideo) -> Unit,
+    onEpisodeDownload: ((MetaVideo) -> Unit)?,
     onEpisodeLongPress: (MetaVideo) -> Unit,
     onSeasonLongPress: (Int) -> Unit,
     onOpenMeta: ((MetaPreview) -> Unit)?,
@@ -2307,6 +2328,7 @@ private fun ConfiguredMetaSections(
                     isTablet = isTablet,
                     shuffleEnabled = shuffleEnabled,
                     onPlayClick = onPrimaryPlayClick,
+                    onDownloadClick = onMovieDownload,
                     onPlayLongClick = if (showManualPlayOption) onPrimaryPlayLongClick else null,
                     onShuffleClick = onShuffleClick,
                     onWatchedClick = onWatchedClick,
@@ -2378,6 +2400,7 @@ private fun ConfiguredMetaSections(
                         episodeRatingsVisibility = settings.episodeRatingsVisibility,
                         blurUnwatchedEpisodes = blurUnwatchedEpisodes,
                         onEpisodeClick = onEpisodeClick,
+                        onEpisodeDownload = onEpisodeDownload,
                         onEpisodeLongPress = onEpisodeLongPress,
                         onSeasonLongPress = onSeasonLongPress,
                     )

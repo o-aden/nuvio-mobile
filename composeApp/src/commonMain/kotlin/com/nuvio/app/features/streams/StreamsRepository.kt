@@ -660,6 +660,19 @@ object StreamsRepository {
         _uiState.update { it.copy(selectedFilter = addonId) }
     }
 
+    /** Fetches Manager-ranked sources without changing stream picker or autoplay state. */
+    internal suspend fun fetchManagedStreamGroup(type: String, videoId: String): AddonStreamGroup {
+        val runtime = ManagedRuntimeRepository.requireRuntime()
+        val url = ManagedRuntimeContract.buildStreamUrl(runtime.manifestUrl, type, videoId)
+            ?: error("Invalid managed content identifier")
+        val payload = ManagedRuntimeRepository.fetchManagedText(url)
+        val addonId = ManagedPlaybackPolicy.PREFIX + runtime.identity
+        val streams = StreamParser.parse(payload, ManagedPlaybackPolicy.NAME, addonId).filter {
+            ManagedPlaybackPolicy.compatible(it, ManagedPlaybackCapabilities.av1Supported, ManagedPlaybackCapabilities.hevcSupported)
+        }
+        return AddonStreamGroup(ManagedPlaybackPolicy.NAME, addonId, streams)
+    }
+
     /** This path never queries embedded streams, plugins, direct debrid, or ordinary stream addons. */
     private fun loadManaged(type: String, videoId: String, season: Int?, episode: Int?, manualSelection: Boolean, forceRefresh: Boolean) {
         val token = requestToken(type, videoId, season, episode, manualSelection)
@@ -673,17 +686,11 @@ object StreamsRepository {
         _uiState.value = StreamsUiState(requestToken = token, isAnyLoading = true)
         activeJob = scope.launch {
             try {
-                val runtime = ManagedRuntimeRepository.requireRuntime()
-                val url = ManagedRuntimeContract.buildStreamUrl(runtime.manifestUrl, type, videoId)
-                    ?: error("Invalid managed content identifier")
-                val payload = ManagedRuntimeRepository.fetchManagedText(url)
+                val group = fetchManagedStreamGroup(type, videoId)
                 if (activeRequestKey != requestKey || ProfileRepository.activeProfileId != profileId ||
                     ManagedDeviceStorage.generation() != generation ||
                     (AuthRepository.state.value as? AuthState.Authenticated)?.userId != accountId) return@launch
-                val addonId = ManagedPlaybackPolicy.PREFIX + runtime.identity
-                val streams = StreamParser.parse(payload, ManagedPlaybackPolicy.NAME, addonId).filter {
-                    ManagedPlaybackPolicy.compatible(it, ManagedPlaybackCapabilities.av1Supported, ManagedPlaybackCapabilities.hevcSupported)
-                }
+                val streams = group.streams
                 PlayerSettingsRepository.ensureLoaded()
                 val settings = PlayerSettingsRepository.uiState.value
                 val evaluation = StreamAutoPlaySelector.evaluateAutoPlayStream(
@@ -697,8 +704,8 @@ object StreamsRepository {
                 )
                 _uiState.value = StreamsUiState(
                     requestToken = token,
-                    groups = listOf(AddonStreamGroup(ManagedPlaybackPolicy.NAME, addonId, streams)),
-                    activeAddonIds = setOf(addonId),
+                    groups = listOf(group),
+                    activeAddonIds = setOf(group.addonId),
                     autoPlayDecided = true,
                     autoPlayStream = evaluation.stream,
                     autoPlayCandidates = evaluation.readyStreams,

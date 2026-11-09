@@ -37,6 +37,10 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Download
+import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -108,6 +112,7 @@ fun DetailSeriesContent(
     episodeRatingsVisibility: EpisodeRatingsVisibility = EpisodeRatingsVisibility.SHOW_ALL,
     blurUnwatchedEpisodes: Boolean = false,
     onEpisodeClick: ((MetaVideo) -> Unit)? = null,
+    onEpisodeDownload: ((MetaVideo) -> Unit)? = null,
     onEpisodeLongPress: ((MetaVideo) -> Unit)? = null,
     onSeasonLongPress: ((Int) -> Unit)? = null,
 ) {
@@ -233,6 +238,7 @@ fun DetailSeriesContent(
                                 preferredEpisodeNumber = preferredEpisodeNumber,
                             ),
                             onEpisodeClick = onEpisodeClick,
+                            onEpisodeDownload = onEpisodeDownload,
                             onEpisodeLongPress = onEpisodeLongPress,
                         )
                     } else {
@@ -262,6 +268,7 @@ fun DetailSeriesContent(
                                     blurUnwatchedEpisodes = blurUnwatchedEpisodes,
                                     sizing = sizing,
                                     onClick = { onEpisodeClick?.invoke(episode) },
+                                    onDownload = episode.downloadAction(onEpisodeDownload),
                                     onLongPress = { onEpisodeLongPress?.invoke(episode) },
                                 )
                             }
@@ -321,6 +328,7 @@ internal fun DetailSeriesListEpisode(
     blurUnwatchedEpisodes: Boolean,
     onEpisodeClick: ((MetaVideo) -> Unit)?,
     onEpisodeLongPress: ((MetaVideo) -> Unit)?,
+    onEpisodeDownload: ((MetaVideo) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
@@ -347,6 +355,7 @@ internal fun DetailSeriesListEpisode(
             blurUnwatchedEpisodes = blurUnwatchedEpisodes,
             sizing = sizing,
             onClick = { onEpisodeClick?.invoke(episode) },
+            onDownload = episode.downloadAction(onEpisodeDownload),
             onLongPress = { onEpisodeLongPress?.invoke(episode) },
         )
     }
@@ -710,6 +719,7 @@ private fun EpisodeHorizontalRow(
     blurUnwatchedEpisodes: Boolean,
     preferredEpisodeNumber: Int? = null,
     onEpisodeClick: ((MetaVideo) -> Unit)?,
+    onEpisodeDownload: ((MetaVideo) -> Unit)?,
     onEpisodeLongPress: ((MetaVideo) -> Unit)?,
 ) {
     val rowMetrics = rememberEpisodeHorizontalCardMetrics(maxWidthDp)
@@ -769,6 +779,7 @@ private fun EpisodeHorizontalRow(
                 blurUnwatchedEpisodes = blurUnwatchedEpisodes,
                 metrics = rowMetrics,
                 onClick = { onEpisodeClick?.invoke(episode) },
+                onDownload = episode.downloadAction(onEpisodeDownload),
                 onLongPress = { onEpisodeLongPress?.invoke(episode) },
             )
         }
@@ -788,6 +799,7 @@ private fun EpisodeHorizontalCard(
     metrics: EpisodeHorizontalCardMetrics,
     onClick: (() -> Unit)? = null,
     onLongPress: (() -> Unit)? = null,
+    onDownload: (() -> Unit)? = null,
 ) {
     val cardShape = RoundedCornerShape(metrics.cornerRadius)
     val ratingLabel = remember(imdbRating, episodeRatingsVisibility, isWatched) {
@@ -857,6 +869,13 @@ private fun EpisodeHorizontalCard(
                 .align(Alignment.TopEnd)
                 .padding(metrics.contentPadding),
         )
+
+        if (onDownload != null) {
+            EpisodeDownloadButton(
+                onClick = onDownload,
+                modifier = Modifier.align(Alignment.TopStart).padding(metrics.contentPadding),
+            )
+        }
 
         Column(
             modifier = Modifier
@@ -1175,6 +1194,7 @@ private fun EpisodeListCard(
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,
     onLongPress: (() -> Unit)? = null,
+    onDownload: (() -> Unit)? = null,
 ) {
     val cornerRadius = rememberPosterCardStyleUiState().cornerRadiusDp.dp
     val cardShape = RoundedCornerShape(cornerRadius)
@@ -1315,6 +1335,12 @@ private fun EpisodeListCard(
                     )
                 }
             }
+            if (onDownload != null) {
+                EpisodeDownloadButton(
+                    onClick = onDownload,
+                    modifier = Modifier.align(Alignment.CenterVertically).padding(end = 6.dp),
+                )
+            }
         }
 
         progressEntry
@@ -1331,6 +1357,18 @@ private fun EpisodeListCard(
                     fillColor = MaterialTheme.colorScheme.primary,
                 )
             }
+    }
+}
+
+private fun MetaVideo.downloadAction(onEpisodeDownload: ((MetaVideo) -> Unit)?): (() -> Unit)? {
+    if (onEpisodeDownload == null || season == null || episode == null) return null
+    return { onEpisodeDownload(this) }
+}
+
+@Composable
+private fun EpisodeDownloadButton(onClick: () -> Unit, modifier: Modifier) {
+    FilledTonalIconButton(onClick = onClick, modifier = modifier.size(48.dp)) {
+        Icon(Icons.Rounded.Download, contentDescription = stringResource(Res.string.streams_download_file))
     }
 }
 
